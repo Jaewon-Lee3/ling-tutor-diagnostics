@@ -20,13 +20,14 @@ export interface Problem {
 
 export interface DiagnosticData {
   diagnosis: {
-    problem_understanding: 'low' | 'medium' | 'high';
-    concept_knowledge: 'low' | 'medium' | 'high';
-    error_pattern: 'none' | 'calculation_error' | 'logical_error' | 'concept_confusion' | 'approach_error';
-    learning_style: 'visual' | 'logical' | 'experimental' | 'unknown';
+    survey_gist: 'low' | 'medium' | 'high';
+    question_focus: 'low' | 'medium' | 'high';
+    reading_depth: 'low' | 'medium' | 'high';
+    recite_articulation: 'low' | 'medium' | 'high';
+    review_accuracy: 'low' | 'medium' | 'high';
     confidence_level: 'low' | 'medium' | 'high';
   };
-  recommended_stage: '1' | '2' | '3' | '4';
+  recommended_stage: 'survey' | 'question' | 'read' | 'recite' | 'review';
   stage_reason: string;
   next_question: string;
   feedback_completed: boolean;
@@ -57,11 +58,12 @@ const nowTime = () =>
 
 const uid = () => Math.random().toString(36).slice(2);
 
-const STAGES: Record<string, { color: string; label: string }> = {
-  '1': { color: 'bg-blue-100 text-blue-800', label: '문제 이해하기' },
-  '2': { color: 'bg-green-100 text-green-800', label: '계획 세우기' },
-  '3': { color: 'bg-orange-100 text-orange-800', label: '계획 실행하기' },
-  '4': { color: 'bg-purple-100 text-purple-800', label: '되돌아보기' },
+const STAGES: Record<DiagnosticData['recommended_stage'], { color: string; label: string; subtitle: string }> = {
+  survey: { color: 'bg-blue-100 text-blue-800', label: 'Survey', subtitle: '지문 훑어보기' },
+  question: { color: 'bg-green-100 text-green-800', label: 'Question', subtitle: '문항 요구 파악' },
+  read: { color: 'bg-orange-100 text-orange-800', label: 'Read', subtitle: '본문 정독 및 근거 찾기' },
+  recite: { color: 'bg-purple-100 text-purple-800', label: 'Recite', subtitle: '핵심 내용 말해보기' },
+  review: { color: 'bg-slate-100 text-slate-800', label: 'Review', subtitle: '선택지 검토 및 확인' },
 };
 
 function escapeNewlinesInsideStrings(src: string): string {
@@ -172,12 +174,13 @@ function validateDiagnostic(obj: unknown): asserts obj is DiagnosticData {
   const o = obj as Record<string, unknown>;
   const d = o.diagnosis as Record<string, unknown> | undefined;
   if (!d || typeof d !== 'object') throw new Error('diagnosis 필드가 없습니다.');
-  if (!isEnum(d.problem_understanding, ['low', 'medium', 'high'] as const)) throw new Error('problem_understanding 값 오류');
-  if (!isEnum(d.concept_knowledge, ['low', 'medium', 'high'] as const)) throw new Error('concept_knowledge 값 오류');
-  if (!isEnum(d.error_pattern, ['none', 'calculation_error', 'logical_error', 'concept_confusion', 'approach_error'] as const)) throw new Error('error_pattern 값 오류');
-  if (!isEnum(d.learning_style, ['visual', 'logical', 'experimental', 'unknown'] as const)) throw new Error('learning_style 값 오류');
+  if (!isEnum(d.survey_gist, ['low', 'medium', 'high'] as const)) throw new Error('survey_gist 값 오류');
+  if (!isEnum(d.question_focus, ['low', 'medium', 'high'] as const)) throw new Error('question_focus 값 오류');
+  if (!isEnum(d.reading_depth, ['low', 'medium', 'high'] as const)) throw new Error('reading_depth 값 오류');
+  if (!isEnum(d.recite_articulation, ['low', 'medium', 'high'] as const)) throw new Error('recite_articulation 값 오류');
+  if (!isEnum(d.review_accuracy, ['low', 'medium', 'high'] as const)) throw new Error('review_accuracy 값 오류');
   if (!isEnum(d.confidence_level, ['low', 'medium', 'high'] as const)) throw new Error('confidence_level 값 오류');
-  if (!isEnum(o.recommended_stage, ['1', '2', '3', '4'] as const)) throw new Error('recommended_stage 값 오류');
+  if (!isEnum(o.recommended_stage, ['survey', 'question', 'read', 'recite', 'review'] as const)) throw new Error('recommended_stage 값 오류');
   if (typeof o.stage_reason !== 'string') throw new Error('stage_reason은 문자열이어야 합니다.');
   if (typeof o.next_question !== 'string') throw new Error('next_question은 문자열이어야 합니다.');
   if (typeof o.feedback_completed !== 'boolean') throw new Error('feedback_completed는 boolean이어야 합니다.');
@@ -196,47 +199,46 @@ interface ProviderArgs {
   signal?: AbortSignal;
 }
 
-const SYSTEM_PROMPT_BASE = `당신은 폴리아의 4단계 문제해결 접근법(1. 문제 이해하기, 2. 계획 세우기, 3. 계획 실행하기, 4. 되돌아보기)을 기반으로 학생의 수학 학습 상태를 진단하는 교육용 LLM입니다. 
-주어진 학생의 응답과 문제 데이터를 분석하여 다음을 수행하세요:
+const SYSTEM_PROMPT_BASE = `당신은 영어와 국어 독해 시험을 준비하는 학습자를 돕는 교육용 LLM 코치입니다.
+SQ3R 학습 전략(Survey → Question → Read → Recite → Review)을 바탕으로 학생의 지문 이해와 답안 준비 상태를 진단하세요.
 
 ### **입력 데이터**
-- **문제**: {문제 텍스트, 예: "이차방정식 x^2 - 5x + 6 = 0의 근을 구하세요."}
-- **학생 응답**: {학생의 답변, 풀이 과정, 또는 질문, 예: "근이 뭔지 모르겠어요", "x = 2, 4", 또는 "(x-2)(x-4) = 0"}
-- **컨텍스트** (선택 사항): {이전 대화 이력, 학생의 학습 스타일(시각적/논리적/실험적), 과거 오류 패턴}
+- **지문/문제 정보**: {시험 지문, 발췌문, 혹은 문제 설명}
+- **학생 응답**: {학생의 답변, 생각 정리, 또는 질문}
+- **컨텍스트** (선택 사항): {이전 대화, 학습 선호, 반복되는 오류 패턴 등}
 
 ### **임무**
-1. **학생 상태 진단**:
-   - **문제 이해도**: 학생이 문제의 요구사항(예: 근 구하기)을 파악했는지? (낮음/중간/높음)
-   - **개념 지식**: 관련 수학 개념(예: 이차방정식, 인수분해)을 이해하는 수준 (낮음/중간/높음)
-   - **오류 패턴**: 계산 실수, 논리 오류, 개념 혼동, 접근법 선택 오류 등 식별
-   - **학습 스타일**: 시각적(다이어그램 선호), 논리적(공식 선호), 실험적(대입 시도) 중 선호 추정
-   - **자신감 수준**: 학생의 답변에서 드러나는 태도 (낮음: 좌절/망설임, 중간: 보통, 높음: 자신감)
+1. **SQ3R 단계별 진단** (각 항목은 low/medium/high 중 하나):
+   - **survey_gist**: 학생이 지문의 구조와 주제를 얼마나 파악했는지 평가
+   - **question_focus**: 학생이 문항의 요구사항과 채점 포인트를 명확히 이해했는지 판단
+   - **reading_depth**: 지문에서 핵심 근거를 찾고 해석하는 능력 평가
+   - **recite_articulation**: 내용을 요약·재진술하거나 자신의 말로 설명하는 능력 평가
+   - **review_accuracy**: 선택지 확인, 답 검토 등 최종 점검을 수행하는 태도 평가
+   - **confidence_level**: 학생 발화에서 드러나는 자신감 수준 (low/medium/high)
 
-2. **폴리아 4단계 추천**:
-   - 진단 결과에 따라 적합한 폴리아 단계(1~4) 추천
-   - 이유 설명: 왜 해당 단계를 추천하는지 간단히 기술
+2. **SQ3R 추천 단계**:
+   - 현재 상황에서 가장 시급하게 강화해야 할 단계 하나를 `survey`/`question`/`read`/`recite`/`review` 중 하나로 지정
+   - 그 단계가 필요한 이유를 간단히 설명
 
-3. **다음 질문 제안**:
-   - 학생의 상태에 맞춘 후속 질문 또는 힌트 (예: "근이 뭔지 설명해볼래?", "계산을 다시 확인해볼까?") 
-   - 4단계(되돌아보기)는 LLM이 직접 해당 문제의 포인트와 풀이과정에서 학생이 알아야할 핵심 포인트를 정리해주는 것으로 대체한다.
+3. **다음 액션 제안**:
+   - 학생이 곧바로 실천할 수 있는 질문, 읽기 전략, 혹은 점검 과제를 제안
 
 4. **피드백 완료 여부 판단**:
-   - 학생이 충분한 피드백을 받았는지 여부 판단 (예: "더 이상 질문이 없고, 학생이 문제를 이해한 것으로 보임")
-   - "true" 또는 "false"로 응답
-
+   - 학생이 목표 이해에 도달했거나 더 이상의 지도가 필요 없다고 판단되면 true, 아니라면 false
 
 ### **출력 형식**
 {
   "diagnosis": {
-    "problem_understanding": "low/medium/high",
-    "concept_knowledge": "low/medium/high",
-    "error_pattern": "none/calculation_error/logical_error/concept_confusion/approach_error",
-    "learning_style": "visual/logical/experimental/unknown",
+    "survey_gist": "low/medium/high",
+    "question_focus": "low/medium/high",
+    "reading_depth": "low/medium/high",
+    "recite_articulation": "low/medium/high",
+    "review_accuracy": "low/medium/high",
     "confidence_level": "low/medium/high"
   },
-  "recommended_stage": "1/2/3/4",
+  "recommended_stage": "survey/question/read/recite/review",
   "stage_reason": "추천 이유 설명",
-  "next_question": "학생에게 제안할 질문 또는 힌트",
+  "next_question": "학생에게 줄 액션/질문",
   "feedback_completed": "true/false"
 }`;
 
@@ -275,15 +277,16 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
       diagnosis: {
         type: "OBJECT",
         properties: {
-          problem_understanding: { type: "STRING", enum: ["low","medium","high"] },
-          concept_knowledge:    { type: "STRING", enum: ["low","medium","high"] },
-          error_pattern:        { type: "STRING", enum: ["none","calculation_error","logical_error","concept_confusion","approach_error"] },
-          learning_style:       { type: "STRING", enum: ["visual","logical","experimental","unknown"] },
-          confidence_level:     { type: "STRING", enum: ["low","medium","high"] }
+          survey_gist:        { type: "STRING", enum: ["low","medium","high"] },
+          question_focus:     { type: "STRING", enum: ["low","medium","high"] },
+          reading_depth:      { type: "STRING", enum: ["low","medium","high"] },
+          recite_articulation:{ type: "STRING", enum: ["low","medium","high"] },
+          review_accuracy:    { type: "STRING", enum: ["low","medium","high"] },
+          confidence_level:   { type: "STRING", enum: ["low","medium","high"] }
         },
-        required: ["problem_understanding","concept_knowledge","error_pattern","learning_style","confidence_level"]
+        required: ["survey_gist","question_focus","reading_depth","recite_articulation","review_accuracy","confidence_level"]
       },
-      recommended_stage: { type: "STRING", enum: ["1","2","3","4"] },
+      recommended_stage: { type: "STRING", enum: ["survey","question","read","recite","review"] },
       stage_reason:      { type: "STRING" },
       next_question:     { type: "STRING" },
       feedback_completed: { type: "BOOLEAN" }
@@ -714,15 +717,22 @@ const MathTutorDiagnostic: React.FC = () => {
     }
   };
 
-  const stagePill = (stage?: string) => {
-    if (!stage) return null;
-    const meta = STAGES[stage] || { color: 'bg-gray-100 text-gray-800', label: '단계 미정' };
+const stagePill = (stage?: DiagnosticData['recommended_stage']) => {
+  if (!stage) return null;
+  const meta = STAGES[stage];
+  if (!meta) {
     return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${meta.color}`}>
-        단계 {stage}: {meta.label}
+      <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+        SQ3R 단계 미정
       </span>
     );
-  };
+  }
+  return (
+    <span className={`px-3 py-1 rounded-full text-sm font-medium ${meta.color}`}>
+      SQ3R · {meta.label} ({meta.subtitle})
+    </span>
+  );
+};
 
   return (
     <div className="w-full min-h-screen bg-gray-50 py-4 sm:py-6 lg:py-8">
@@ -1342,11 +1352,13 @@ const MathTutorDiagnostic: React.FC = () => {
                 <div className="mb-3">{stagePill(currentDiagnostic.recommended_stage)}</div>
 
                 <div className="bg-white rounded p-3 mb-3">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="text-black">문제 이해도: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.problem_understanding}</span></div>
-                    <div className="text-black">개념 지식: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.concept_knowledge}</span></div>
-                    <div className="text-black">오류 패턴: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.error_pattern}</span></div>
-                    <div className="text-black">자신감: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.confidence_level}</span></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    <div className="text-black">Survey · 지문 훑어보기: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.survey_gist}</span></div>
+                    <div className="text-black">Question · 요구 파악: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.question_focus}</span></div>
+                    <div className="text-black">Read · 근거 탐색: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.reading_depth}</span></div>
+                    <div className="text-black">Recite · 요약/설명: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.recite_articulation}</span></div>
+                    <div className="text-black">Review · 점검 태도: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.review_accuracy}</span></div>
+                    <div className="text-black">Self Confidence: <span className="font-medium text-purple-700">{currentDiagnostic.diagnosis.confidence_level}</span></div>
                   </div>
                 </div>
 
@@ -1384,11 +1396,13 @@ const MathTutorDiagnostic: React.FC = () => {
 
                       <div className="bg-white rounded p-3 mb-3">
                         <h4 className="font-medium text-black mb-2">진단 상태</h4>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="text-black">문제 이해도: <span className="font-medium">{m.diagnostic!.diagnosis.problem_understanding}</span></div>
-                          <div className="text-black">개념 지식: <span className="font-medium">{m.diagnostic!.diagnosis.concept_knowledge}</span></div>
-                          <div className="text-black">오류 패턴: <span className="font-medium">{m.diagnostic!.diagnosis.error_pattern}</span></div>
-                          <div className="text-black">자신감: <span className="font-medium">{m.diagnostic!.diagnosis.confidence_level}</span></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                          <div className="text-black">Survey · 지문 훑어보기: <span className="font-medium">{m.diagnostic!.diagnosis.survey_gist}</span></div>
+                          <div className="text-black">Question · 요구 파악: <span className="font-medium">{m.diagnostic!.diagnosis.question_focus}</span></div>
+                          <div className="text-black">Read · 근거 탐색: <span className="font-medium">{m.diagnostic!.diagnosis.reading_depth}</span></div>
+                          <div className="text-black">Recite · 요약/설명: <span className="font-medium">{m.diagnostic!.diagnosis.recite_articulation}</span></div>
+                          <div className="text-black">Review · 점검 태도: <span className="font-medium">{m.diagnostic!.diagnosis.review_accuracy}</span></div>
+                          <div className="text-black">Self Confidence: <span className="font-medium">{m.diagnostic!.diagnosis.confidence_level}</span></div>
                         </div>
                       </div>
 

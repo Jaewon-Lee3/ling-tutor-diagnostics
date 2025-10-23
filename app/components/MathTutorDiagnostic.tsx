@@ -217,7 +217,7 @@ SQ3R 학습 전략(Survey → Question → Read → Recite → Review)을 바탕
    - **confidence_level**: 학생 발화에서 드러나는 자신감 수준 (low/medium/high)
 
 2. **SQ3R 추천 단계**:
-   - 현재 상황에서 가장 시급하게 강화해야 할 단계 하나를 `survey`/`question`/`read`/`recite`/`review` 중 하나로 지정
+   - 현재 상황에서 가장 시급하게 강화해야 할 단계 하나를 survey/question/read/recite/review 중 하나로 지정
    - 그 단계가 필요한 이유를 간단히 설명
 
 3. **다음 액션 제안**:

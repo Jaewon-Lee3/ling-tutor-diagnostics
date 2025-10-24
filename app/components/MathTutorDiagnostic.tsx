@@ -268,55 +268,44 @@ interface GeminiCandidate { content?: { parts?: GeminiPart[] }; finishReason?: s
 interface GeminiResponse { promptFeedback?: { blockReason?: string }; candidates?: GeminiCandidate[] }
 
 /**********************
- * Provider Call (Gemini)
+ * Provider Call (OpenRouter with Gemini)
  **********************/
 async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMessage, context, signal }: ProviderArgs): Promise<DiagnosticData> {
-  const responseSchema = {
-    type: "OBJECT",
-    properties: {
-      diagnosis: {
-        type: "OBJECT",
-        properties: {
-          survey_gist:        { type: "STRING", enum: ["low","medium","high"] },
-          question_focus:     { type: "STRING", enum: ["low","medium","high"] },
-          reading_depth:      { type: "STRING", enum: ["low","medium","high"] },
-          recite_articulation:{ type: "STRING", enum: ["low","medium","high"] },
-          review_accuracy:    { type: "STRING", enum: ["low","medium","high"] },
-          confidence_level:   { type: "STRING", enum: ["low","medium","high"] }
-        },
-        required: ["survey_gist","question_focus","reading_depth","recite_articulation","review_accuracy","confidence_level"]
-      },
-      recommended_stage: { type: "STRING", enum: ["survey","question","read","recite","review"] },
-      stage_reason:      { type: "STRING" },
-      next_question:     { type: "STRING" },
-      feedback_completed: { type: "BOOLEAN" }
-    },
-    required: ["diagnosis","recommended_stage","stage_reason","next_question","feedback_completed"]
-  } as const;
+  // OpenRouter의 OpenAI 호환 형식으로 메시지 구성
+  const messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
+    {
+      role: "system",
+      content: systemPrompt
+    }
+  ];
 
   // 이미지가 있는 경우와 없는 경우를 구분하여 처리
-  const userParts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
-  
   if (problemImage) {
-    // 이미지가 있는 경우: 이미지와 텍스트를 함께 전송
-    const base64Data = problemImage.split(',')[1]; // data:image/png;base64, 부분 제거
-    userParts.push({
-      inlineData: {
-        mimeType: problemImage.split(':')[1].split(';')[0], // image/png, image/jpeg 등
-        data: base64Data
-      }
-    });
-    userParts.push({
-      text:
-        `### 실제 입력 데이터\n` +
-        `- 문제: 위 이미지를 참고하세요. ${problem}\n` +
-        `- 학생 응답: ${userMessage}\n` +
-        `- 컨텍스트: ${context}`
+    // 이미지가 있는 경우: OpenAI vision format 사용
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "image_url",
+          image_url: {
+            url: problemImage // data:image/png;base64,... 형식 그대로 전송
+          }
+        },
+        {
+          type: "text",
+          text:
+            `### 실제 입력 데이터\n` +
+            `- 문제: 위 이미지를 참고하세요. ${problem}\n` +
+            `- 학생 응답: ${userMessage}\n` +
+            `- 컨텍스트: ${context}`
+        }
+      ]
     });
   } else {
     // 텍스트만 있는 경우
-    userParts.push({
-      text:
+    messages.push({
+      role: "user",
+      content:
         `### 실제 입력 데이터\n` +
         `- 문제: ${problem}\n` +
         `- 학생 응답: ${userMessage}\n` +
@@ -325,65 +314,46 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
   }
 
   const body = {
-    systemInstruction: {
-      role: "system",
-      parts: [{ text: systemPrompt }]
-    },
-    contents: [
-      {
-        role: "user",
-        parts: userParts
-      }
-    ],
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 8192,
-      responseMimeType: "application/json",
-      responseSchema,
-      thinkingConfig: {
-        thinkingBudget: 1024
-      }
-    }
+    model: "google/gemini-2.5-pro-latest",
+    messages,
+    temperature: 0,
+    max_tokens: 8192,
+    response_format: { type: "json_object" }
   };
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, signal, body: JSON.stringify(body) }
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : '',
+        "X-Title": "Math Tutor Diagnostic"
+      },
+      signal,
+      body: JSON.stringify(body)
+    }
   );
 
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`Gemini API 오류: ${res.status} ${res.statusText} - ${t}`);
+    throw new Error(`OpenRouter API 오류: ${res.status} ${res.statusText} - ${t}`);
   }
 
-  const data = (await res.json()) as GeminiResponse & {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string, inlineData?: { data: string } }> } }>;
+  const data = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    error?: { message: string };
   };
 
-  const blocked = data?.promptFeedback?.blockReason;
-  if (blocked) throw new Error(`안전성 정책으로 차단됨: ${blocked}`);
-
-  const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  let text = "";
-  for (const p of parts) {
-    if (typeof p?.text === "string" && p.text.trim()) { text = p.text.trim(); break; }
-  }
-  if (!text) {
-    for (const p of parts) {
-      const b64 = p?.inlineData?.data;
-      if (b64) {
-        try {
-          const decoded = typeof globalThis.atob === "function" ? globalThis.atob(b64) : "";
-          if (decoded.trim()) { text = decoded.trim(); break; }
-        } catch {}
-      }
-    }
+  if (data.error) {
+    throw new Error(`OpenRouter 에러: ${data.error.message}`);
   }
 
+  const text = data?.choices?.[0]?.message?.content?.trim();
+
   if (!text) {
-    const finish = data?.candidates?.[0]?.finishReason;
-    const hint = finish ? ` (finishReason: ${finish})` : "";
-    throw new Error(`Gemini 응답에서 JSON 본문을 찾지 못했습니다.${hint}`);
+    throw new Error(`OpenRouter 응답에서 JSON 본문을 찾지 못했습니다.`);
   }
 
   const parsed = parseJsonLoose(text);
@@ -505,7 +475,7 @@ const MathTutorDiagnostic: React.FC = () => {
   // 환경변수에서 API 키 로드
   useEffect(() => {
     // 먼저 환경변수 직접 확인
-    const envApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const envApiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
     if (envApiKey) {
       setApiKey(envApiKey);
     } else {
@@ -766,7 +736,7 @@ const stagePill = (stage?: DiagnosticData['recommended_stage']) => {
         <div className="mb-4 sm:mb-6">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-1 sm:gap-2">
             <Brain className="text-blue-600" />
-            독해 교육용 LLM 진단 시스템 (Gemini 전용)
+            독해 교육용 LLM 진단 시스템 (OpenRouter · Gemini)
           </h1>
           <p className="text-gray-600 text-xs sm:text-sm">학생-LLM 대화형 진단 시스템</p>
         </div>
@@ -1330,7 +1300,7 @@ const stagePill = (stage?: DiagnosticData['recommended_stage']) => {
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    <span className="text-xs ml-2">GEMINI 응답 생성 중…</span>
+                    <span className="text-xs ml-2">OpenRouter 응답 생성 중…</span>
                   </div>
                 </div>
               </div>

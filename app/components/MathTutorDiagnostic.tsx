@@ -174,13 +174,13 @@ function validateDiagnostic(obj: unknown): asserts obj is DiagnosticData {
   const o = obj as Record<string, unknown>;
   const d = o.diagnosis as Record<string, unknown> | undefined;
   if (!d || typeof d !== 'object') throw new Error('diagnosis 필드가 없습니다.');
-  if (!isEnum(d.survey_gist, ['low', 'medium', 'high'] as const)) throw new Error('survey_gist 값 오류');
-  if (!isEnum(d.question_focus, ['low', 'medium', 'high'] as const)) throw new Error('question_focus 값 오류');
-  if (!isEnum(d.reading_depth, ['low', 'medium', 'high'] as const)) throw new Error('reading_depth 값 오류');
-  if (!isEnum(d.recite_articulation, ['low', 'medium', 'high'] as const)) throw new Error('recite_articulation 값 오류');
-  if (!isEnum(d.review_accuracy, ['low', 'medium', 'high'] as const)) throw new Error('review_accuracy 값 오류');
-  if (!isEnum(d.confidence_level, ['low', 'medium', 'high'] as const)) throw new Error('confidence_level 값 오류');
-  if (!isEnum(o.recommended_stage, ['survey', 'question', 'read', 'recite', 'review'] as const)) throw new Error('recommended_stage 값 오류');
+  if (!isEnum(d.survey_gist, ['low', 'medium', 'high'] as const)) throw new Error(`survey_gist 값 오류: ${d.survey_gist}`);
+  if (!isEnum(d.question_focus, ['low', 'medium', 'high'] as const)) throw new Error(`question_focus 값 오류: ${d.question_focus}`);
+  if (!isEnum(d.reading_depth, ['low', 'medium', 'high'] as const)) throw new Error(`reading_depth 값 오류: ${d.reading_depth}`);
+  if (!isEnum(d.recite_articulation, ['low', 'medium', 'high'] as const)) throw new Error(`recite_articulation 값 오류: ${d.recite_articulation}`);
+  if (!isEnum(d.review_accuracy, ['low', 'medium', 'high'] as const)) throw new Error(`review_accuracy 값 오류: ${d.review_accuracy}`);
+  if (!isEnum(d.confidence_level, ['low', 'medium', 'high'] as const)) throw new Error(`confidence_level 값 오류: ${d.confidence_level}`);
+  if (!isEnum(o.recommended_stage, ['survey', 'question', 'read', 'recite', 'review'] as const)) throw new Error(`recommended_stage 값 오류: ${o.recommended_stage} (허용값: survey, question, read, recite, review)`);
   if (typeof o.stage_reason !== 'string') throw new Error('stage_reason은 문자열이어야 합니다.');
   if (typeof o.next_question !== 'string') throw new Error('next_question은 문자열이어야 합니다.');
 

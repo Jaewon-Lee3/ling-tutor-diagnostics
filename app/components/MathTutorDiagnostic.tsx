@@ -321,7 +321,7 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
   }
 
   const body = {
-    model: "anthropic/claude-sonnet-4.5",
+    model: "openai/gpt-5-chat",
     messages,
     temperature: 0,
     max_tokens: 8192,

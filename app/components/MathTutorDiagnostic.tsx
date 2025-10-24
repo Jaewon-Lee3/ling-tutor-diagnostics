@@ -314,7 +314,7 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
   }
 
   const body = {
-    model: "google/gemini-2.5-pro-latest",
+    model: "google/gemini-2.5-pro",
     messages,
     temperature: 0,
     max_tokens: 8192,

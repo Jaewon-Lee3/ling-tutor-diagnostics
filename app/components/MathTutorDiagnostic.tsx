@@ -183,6 +183,13 @@ function validateDiagnostic(obj: unknown): asserts obj is DiagnosticData {
   if (!isEnum(o.recommended_stage, ['survey', 'question', 'read', 'recite', 'review'] as const)) throw new Error('recommended_stage 값 오류');
   if (typeof o.stage_reason !== 'string') throw new Error('stage_reason은 문자열이어야 합니다.');
   if (typeof o.next_question !== 'string') throw new Error('next_question은 문자열이어야 합니다.');
+
+  // feedback_completed를 boolean으로 변환 (string "true"/"false"도 허용)
+  if (typeof o.feedback_completed === 'string') {
+    if (o.feedback_completed === 'true') o.feedback_completed = true;
+    else if (o.feedback_completed === 'false') o.feedback_completed = false;
+    else throw new Error('feedback_completed는 boolean 또는 "true"/"false" 문자열이어야 합니다.');
+  }
   if (typeof o.feedback_completed !== 'boolean') throw new Error('feedback_completed는 boolean이어야 합니다.');
 }
 

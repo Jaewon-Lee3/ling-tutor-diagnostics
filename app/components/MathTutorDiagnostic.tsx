@@ -316,11 +316,15 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
   }
 
   const body = {
-    model: "openai/gpt-5-chat",
+    model: "google/gemini-2.5-pro",
     messages,
-    temperature: 0,
+    temperature: 0.2,
     max_tokens: 8192,
-    response_format: { type: "json_object" }
+    response_format: { type: "json_object" },
+    reasoning: {
+      max_tokens: 1024,
+      exclude: true
+    }
   };
 
   const res = await fetch(
@@ -331,7 +335,7 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
         "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : '',
-        "X-Title": "Math Tutor Diagnostic"
+        "X-Title": "English Tutor Diagnostic"
       },
       signal,
       body: JSON.stringify(body)

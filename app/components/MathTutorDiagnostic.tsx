@@ -1404,10 +1404,11 @@ const stagePill = (stage?: DiagnosticData['recommended_stage']) => {
                       <div className="bg-white rounded p-3 mb-3">
                         <h4 className="font-medium text-black mb-2">진단 상태</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                          <div className="text-black">지문 구조: <span className="font-medium">{m.diagnostic!.diagnosis.structure_comprehension}</span></div>
-                          <div className="text-black">한글 번역: <span className="font-medium">{m.diagnostic!.diagnosis.korean_translation}</span></div>
-                          <div className="text-black">의미 해석: <span className="font-medium">{m.diagnostic!.diagnosis.meaning_interpretation}</span></div>
-                          <div className="text-black">문제 해결: <span className="font-medium">{m.diagnostic!.diagnosis.problem_solving}</span></div>
+                          <div className="text-black">Survey (훑어보기): <span className="font-medium">{m.diagnostic!.diagnosis.survey_gist}</span></div>
+                          <div className="text-black">Question (문항 파악): <span className="font-medium">{m.diagnostic!.diagnosis.question_focus}</span></div>
+                          <div className="text-black">Read (정독): <span className="font-medium">{m.diagnostic!.diagnosis.reading_depth}</span></div>
+                          <div className="text-black">Recite (재진술): <span className="font-medium">{m.diagnostic!.diagnosis.recite_articulation}</span></div>
+                          <div className="text-black">Review (검토): <span className="font-medium">{m.diagnostic!.diagnosis.review_accuracy}</span></div>
                           <div className="text-black">자신감 수준: <span className="font-medium">{m.diagnostic!.diagnosis.confidence_level}</span></div>
                         </div>
                       </div>

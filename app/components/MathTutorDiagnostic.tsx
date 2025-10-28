@@ -327,7 +327,7 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
     max_tokens: 8192,
     response_format: { type: "json_object" },
     reasoning: {
-      max_tokens: 1024,
+      max_tokens: 4096,
       exclude: true
     }
   };

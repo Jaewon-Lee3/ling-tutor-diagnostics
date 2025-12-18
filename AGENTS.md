@@ -19,3 +19,6 @@ Commits follow the short, descriptive sentences already in history (`Update Gemi
 
 ## Environment & Security Tips
 Store secrets such as `NEXT_PUBLIC_GEMINI_API_KEY` in `.env.local` and never commit them. The config route echoes this value publicly, so rotate the key immediately if it leaks. When adding new providers, gate them behind server-side env checks and document required variables in the PR description.
+
+## Deployment
+This project is configured for automated deployment on **Vercel**. Every push to the `main` branch triggers a production build. Ensure that `npm run build` passes locally before pushing, as Vercel will fail the deployment if there are ESLint errors or type mismatches.

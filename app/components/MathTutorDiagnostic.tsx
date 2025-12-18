@@ -1,6 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, MessageCircle, Brain, Settings, BookOpen, Key, ChevronDown, ChevronUp, User, Plus, Edit2, Trash2, Check, X, List, Image, Upload, FileText } from 'lucide-react';
+import { Send, MessageCircle, Brain, BookOpen, ChevronDown, ChevronUp, User, Plus, Edit2, Trash2, Check, X, List, Image, Upload, FileText } from 'lucide-react';
 
 /**********************
  * Types
@@ -258,7 +258,22 @@ const SYSTEM_PROMPT_JSON_ONLY = `${SYSTEM_PROMPT_BASE}
 
 
 const buildMessagesForGemini = (msgs: Message[], systemPrompt: string, problem: string, userMessage: string, problemImage?: string) => {
-  const result: any[] = [
+  interface GeminiContentPart {
+    type: 'text' | 'image_url';
+    text?: string;
+    image_url?: { url: string };
+  }
+  interface GeminiMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string | GeminiContentPart[];
+    extra_content?: {
+      google: {
+        thought_signature: string;
+      };
+    };
+  }
+
+  const result: GeminiMessage[] = [
     { role: "system", content: systemPrompt }
   ];
 
@@ -267,7 +282,7 @@ const buildMessagesForGemini = (msgs: Message[], systemPrompt: string, problem: 
     if (m.type === 'student') {
       result.push({ role: "user", content: m.content });
     } else if (m.type === 'llm' && !m.isError) {
-      const msg: any = { role: "assistant", content: m.content };
+      const msg: GeminiMessage = { role: "assistant", content: m.content };
       if (m.thoughtSignature) {
         msg.extra_content = {
           google: {
@@ -305,12 +320,12 @@ interface GeminiInlineData { data: string }
 interface GeminiFunctionCall { name: string }
 interface GeminiPart { text?: string; inlineData?: GeminiInlineData; functionCall?: GeminiFunctionCall }
 interface GeminiCandidate { content?: { parts?: GeminiPart[] }; finishReason?: string }
-interface GeminiResponse { promptFeedback?: { blockReason?: string }; candidates?: GeminiCandidate[] }
+// Unused types removed
 
 /**********************
  * Provider Call (OpenRouter with Gemini)
  **********************/
-async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMessage, context, signal }: ProviderArgs): Promise<{ diagnostic: DiagnosticData, thoughtSignature?: string }> {
+async function callGemini({ apiKey, context, signal }: ProviderArgs): Promise<{ diagnostic: DiagnosticData, thoughtSignature?: string }> {
   // context 인자는 이제 사용하지 않고 내부에서 msgs를 기반으로 직접 구성하거나 
   // 여기서는 ProviderArgs의 타입을 유지하기 위해 context 대신 messages를 직접 넘기도록 호출부에서 수정합니다.
   // 실제로는 callGemini 내부에서 buildMessages 등을 처리하는게 깔끔합니다.
@@ -343,7 +358,16 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
   }
 
   const data = await res.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{
+      message?: {
+        content?: string;
+        extra_content?: {
+          google?: {
+            thought_signature?: string;
+          };
+        };
+      };
+    }>;
     error?: { message: string };
   };
 
@@ -360,7 +384,7 @@ async function callGemini({ apiKey, systemPrompt, problem, problemImage, userMes
   const parsed = parseJsonLoose(text);
   validateDiagnostic(parsed);
 
-  const thoughtSignature = (data?.choices?.[0]?.message as any)?.extra_content?.google?.thought_signature;
+  const thoughtSignature = data?.choices?.[0]?.message?.extra_content?.google?.thought_signature;
 
   return {
     diagnostic: parsed as DiagnosticData,
@@ -401,7 +425,7 @@ const MathTutorDiagnostic: React.FC = () => {
   const SYSTEM_PROMPT_JSON = useMemo(() => SYSTEM_PROMPT_JSON_ONLY, []);
 
   const currentProblem = useMemo(() => {
-    return problems.find(p => p.id === selectedProblemId);
+    return problems.find((p: Problem) => p.id === selectedProblemId);
   }, [problems, selectedProblemId]);
 
   // Load problems from localStorage
@@ -468,9 +492,8 @@ const MathTutorDiagnostic: React.FC = () => {
         updatedAt: nowTime()
       };
       setProblems([defaultProblem]);
-      setSelectedProblemId(defaultProblem.id);
     }
-  }, []);
+  }, [selectedProblemId]);
 
   // Save problems to localStorage whenever they change
   useEffect(() => {
@@ -482,7 +505,7 @@ const MathTutorDiagnostic: React.FC = () => {
   // 환경변수에서 API 키 로드
   useEffect(() => {
     // 먼저 환경변수 직접 확인
-    const envApiKey = process.env.NEXT_PUBLIC_OPENROUTER_API_KEY;
+    const envApiKey = (process as any).env.NEXT_PUBLIC_OPENROUTER_API_KEY;
     if (envApiKey) {
       setApiKey(envApiKey);
     } else {
@@ -527,7 +550,7 @@ const MathTutorDiagnostic: React.FC = () => {
       updatedAt: nowTime()
     };
 
-    setProblems(prev => [...prev, problem]);
+    setProblems((prev: Problem[]) => [...prev, problem]);
     setSelectedProblemId(problem.id);
     setNewProblem({
       title: '',
@@ -558,7 +581,7 @@ const MathTutorDiagnostic: React.FC = () => {
       return;
     }
 
-    setProblems(prev => prev.map(p =>
+    setProblems((prev: Problem[]) => prev.map((p: Problem) =>
       p.id === problemId
         ? {
           ...p,
@@ -599,9 +622,9 @@ const MathTutorDiagnostic: React.FC = () => {
     }
 
     if (confirm('이 문제를 삭제하시겠습니까?')) {
-      setProblems(prev => prev.filter(p => p.id !== problemId));
+      setProblems((prev: Problem[]) => prev.filter((p: Problem) => p.id !== problemId));
       if (selectedProblemId === problemId) {
-        const remainingProblems = problems.filter(p => p.id !== problemId);
+        const remainingProblems = problems.filter((p: Problem) => p.id !== problemId);
         if (remainingProblems.length > 0) {
           setSelectedProblemId(remainingProblems[0].id);
         }
@@ -692,7 +715,7 @@ const MathTutorDiagnostic: React.FC = () => {
       content: currentInput,
       timestamp: nowTime(),
     };
-    setMessages((prev) => [...prev, studentMessage]);
+    setMessages((prev: Message[]) => [...prev, studentMessage]);
 
     try {
       const { diagnostic, thoughtSignature } = await sendToGemini(currentInput);
@@ -705,7 +728,7 @@ const MathTutorDiagnostic: React.FC = () => {
         thoughtSignature, // 추론 서명 저장
         timestamp: nowTime(),
       };
-      setMessages((prev) => [...prev, llmMessage]);
+      setMessages((prev: Message[]) => [...prev, llmMessage]);
       setCurrentInput('');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '알 수 없는 오류';
@@ -717,7 +740,7 @@ const MathTutorDiagnostic: React.FC = () => {
         isError: true,
         debug: err instanceof Error ? String(err.stack ?? '') : undefined,
       };
-      setMessages((prev) => [...prev, llmMessage]);
+      setMessages((prev: Message[]) => [...prev, llmMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -847,7 +870,7 @@ const MathTutorDiagnostic: React.FC = () => {
                       <input
                         type="text"
                         value={newProblem.title}
-                        onChange={(e) => setNewProblem(prev => ({ ...prev, title: e.target.value }))}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProblem((prev: Partial<Problem>) => ({ ...prev, title: e.target.value }))}
                         placeholder="문제 제목"
                         className="w-full px-2 sm:px-3 py-1 border border-gray-300 rounded text-sm text-gray-900"
                       />
@@ -879,7 +902,7 @@ const MathTutorDiagnostic: React.FC = () => {
                       {inputMode === 'text' ? (
                         <textarea
                           value={newProblem.content}
-                          onChange={(e) => setNewProblem(prev => ({ ...prev, content: e.target.value }))}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProblem((prev: Partial<Problem>) => ({ ...prev, content: e.target.value }))}
                           placeholder="문제 내용"
                           className="w-full px-2 sm:px-3 py-1 sm:py-2 border border-gray-300 rounded text-sm text-gray-900"
                           rows={3}
@@ -897,7 +920,7 @@ const MathTutorDiagnostic: React.FC = () => {
                                 const reader = new FileReader();
                                 reader.onloadend = () => {
                                   setImagePreview(reader.result as string);
-                                  setNewProblem(prev => ({
+                                  setNewProblem((prev: Partial<Problem>) => ({
                                     ...prev,
                                     imageUrl: reader.result as string,
                                     content: `[이미지 문제: ${file.name}]`
@@ -928,7 +951,7 @@ const MathTutorDiagnostic: React.FC = () => {
                                 onClick={() => {
                                   setImageFile(null);
                                   setImagePreview(null);
-                                  setNewProblem(prev => ({
+                                  setNewProblem((prev: Partial<Problem>) => ({
                                     ...prev,
                                     imageUrl: undefined,
                                     content: ''
@@ -972,7 +995,7 @@ const MathTutorDiagnostic: React.FC = () => {
                         />
                         <select
                           value={newProblem.difficulty}
-                          onChange={(e) => setNewProblem(prev => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewProblem((prev: Partial<Problem>) => ({ ...prev, difficulty: e.target.value as 'easy' | 'medium' | 'hard' }))}
                           className="px-2 sm:px-3 py-1 border border-gray-300 rounded text-sm text-gray-900"
                         >
                           <option value="easy">쉬움</option>
@@ -1137,7 +1160,7 @@ const MathTutorDiagnostic: React.FC = () => {
                           const reader = new FileReader();
                           reader.onloadend = () => {
                             setImagePreview(reader.result as string);
-                            setNewProblem(prev => ({
+                            setNewProblem((prev: Partial<Problem>) => ({
                               ...prev,
                               imageUrl: reader.result as string,
                               content: `[이미지 문제: ${file.name}]`
@@ -1169,7 +1192,7 @@ const MathTutorDiagnostic: React.FC = () => {
                           onClick={() => {
                             setImageFile(null);
                             setImagePreview(null);
-                            setNewProblem(prev => ({
+                            setNewProblem((prev: Partial<Problem>) => ({
                               ...prev,
                               imageUrl: undefined,
                               content: ''

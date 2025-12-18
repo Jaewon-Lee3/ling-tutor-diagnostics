@@ -1,6 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, MessageCircle, Brain, BookOpen, ChevronDown, ChevronUp, User, Plus, Edit2, Trash2, Check, X, List, Image, Upload, FileText } from 'lucide-react';
+import { Send, MessageCircle, Brain, BookOpen, ChevronDown, ChevronUp, User, Plus, Edit2, Trash2, Check, X, List, Image as LucideImage, Upload, FileText } from 'lucide-react';
 
 /**********************
  * Types
@@ -319,7 +319,6 @@ const buildMessagesForGemini = (msgs: Message[], systemPrompt: string, problem: 
 interface GeminiInlineData { data: string }
 interface GeminiFunctionCall { name: string }
 interface GeminiPart { text?: string; inlineData?: GeminiInlineData; functionCall?: GeminiFunctionCall }
-interface GeminiCandidate { content?: { parts?: GeminiPart[] }; finishReason?: string }
 // Unused types removed
 
 /**********************
@@ -505,7 +504,7 @@ const MathTutorDiagnostic: React.FC = () => {
   // 환경변수에서 API 키 로드
   useEffect(() => {
     // 먼저 환경변수 직접 확인
-    const envApiKey = (process as any).env.NEXT_PUBLIC_OPENROUTER_API_KEY;
+    const envApiKey = (process as unknown as { env: Record<string, string | undefined> }).env.NEXT_PUBLIC_OPENROUTER_API_KEY;
     if (envApiKey) {
       setApiKey(envApiKey);
     } else {
@@ -894,7 +893,7 @@ const MathTutorDiagnostic: React.FC = () => {
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                             }`}
                         >
-                          <Image size={14} />
+                          <LucideImage size={14} />
                           이미지
                         </button>
                       </div>
@@ -1132,7 +1131,7 @@ const MathTutorDiagnostic: React.FC = () => {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                       }`}
                   >
-                    <Image size={18} />
+                    <LucideImage size={18} />
                     이미지 업로드
                   </button>
                 </div>
@@ -1141,7 +1140,7 @@ const MathTutorDiagnostic: React.FC = () => {
                 {inputMode === 'text' ? (
                   <textarea
                     value={newProblem.content}
-                    onChange={(e) => setNewProblem(prev => ({ ...prev, content: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProblem((prev: Partial<Problem>) => ({ ...prev, content: e.target.value }))}
                     placeholder="문제 내용을 입력하세요"
                     className="w-full px-3 py-2 border border-gray-300 rounded text-gray-900"
                     rows={4}
